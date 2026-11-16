@@ -1,11 +1,8 @@
 /**
- * HOME 2.0 STATE CONTROLLER
- * - Real-Time Dynamic Greeting & Live Clock
- * - Warm Light Mode & Dark Mode Switcher
- * - Master Lock Authority (Safety guard for all switches)
- * - Individual Light / Fan Toggles with high-contrast visual states
- * - In-card tabbed schedule and timer handlers
+ * HOME 2.0 - HARDWARE & APP CONFIGURATION / STATE STORE
+ * Manages the global reactive state for relays, physical switches, timers, and locks.
  */
+
 const state = {
   masterLockArmed: true, // TRUE = Controls unlocked & operational; FALSE = Controls locked out
   theme: 'dark',
@@ -49,13 +46,59 @@ const state = {
       isOn: true,
       wallState: 1,
       schedule: null,
-      timerSeconds: 512, // 8m 32s initial
+      timerSeconds: 512, // 8m 32s initial countdown
       timerInterval: null
     }
   ]
 };
 
-// Real-time Greeting and Clock System
+// Expose state globally for browser interop
+window.state = state;
+/**
+ * HOME 2.0 - TOAST NOTIFICATION SYSTEM
+ * Handles transient floating alerts for hardware state changes, timer triggers, and safety warnings.
+ */
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl theme-subcard border shadow-2xl theme-text-strong text-xs font-semibold transition-all duration-300 transform translate-y-3 opacity-0';
+  
+  let icon = 'check_circle';
+  let iconColor = 'text-emerald-500 dark:text-emerald-400';
+  if (type === 'warning' || type === 'lock') {
+    icon = 'lock';
+    iconColor = 'text-amber-500';
+  } else if (type === 'info') {
+    icon = 'info';
+    iconColor = 'text-blue-500 dark:text-blue-400';
+  }
+
+  toast.innerHTML = `
+    <span class="material-symbols-outlined ${iconColor} text-[19px]">${icon}</span>
+    <span>${message}</span>
+  `;
+
+  container.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.remove('translate-y-3', 'opacity-0');
+  });
+
+  setTimeout(() => {
+    toast.classList.add('opacity-0', 'translate-y-3');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// Expose globally
+window.showToast = showToast;
+/**
+ * HOME 2.0 - REAL-TIME CLOCK & DYNAMIC GREETING
+ * Calculates local diurnal phases and renders real-time status beacon.
+ */
+
 function updateRealtimeGreeting() {
   const now = new Date();
   const hours = now.getHours();
@@ -91,39 +134,12 @@ function updateRealtimeGreeting() {
   }
 }
 
-// Toast notification helper
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-
-  const toast = document.createElement('div');
-  toast.className = 'pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl theme-subcard border shadow-2xl theme-text-strong text-xs font-semibold transition-all duration-300 transform translate-y-3 opacity-0';
-  
-  let icon = 'check_circle';
-  let iconColor = 'text-emerald-500 dark:text-emerald-400';
-  if (type === 'warning' || type === 'lock') {
-    icon = 'lock';
-    iconColor = 'text-amber-500';
-  } else if (type === 'info') {
-    icon = 'info';
-    iconColor = 'text-blue-500 dark:text-blue-400';
-  }
-
-  toast.innerHTML = `
-    <span class="material-symbols-outlined ${iconColor} text-[19px]">${icon}</span>
-    <span>${message}</span>
-  `;
-
-  container.appendChild(toast);
-  requestAnimationFrame(() => {
-    toast.classList.remove('translate-y-3', 'opacity-0');
-  });
-
-  setTimeout(() => {
-    toast.classList.add('opacity-0', 'translate-y-3');
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}
+// Expose globally
+window.updateRealtimeGreeting = updateRealtimeGreeting;
+/**
+ * HOME 2.0 - MASTER LOCK SAFETY CONTROLLER
+ * Provides single-point safety lockouts to prevent inadvertent switching of IoT relays.
+ */
 
 // Master Lock Safety Verification Guard
 function checkMasterLock() {
@@ -223,6 +239,15 @@ function toggleMasterLock() {
   }
 }
 
+// Expose globally
+window.checkMasterLock = checkMasterLock;
+window.renderMasterLockState = renderMasterLockState;
+window.toggleMasterLock = toggleMasterLock;
+/**
+ * HOME 2.0 - DEVICE CONTROLLERS & RENDERING ENGINE
+ * Manages load telemetry, relay switching, physical dual-switch wall interlocks, and visual statuses.
+ */
+
 // Counters & Watts calculation
 function updateCounters() {
   const activeCount = state.devices.filter(d => d.isOn).length;
@@ -248,6 +273,8 @@ function updateCounters() {
 function renderDevice1() {
   const d = state.devices[0];
   const btn = document.getElementById('btn-toggle-1');
+  if (!btn) return;
+
   const icon = document.getElementById('icon-dev-1');
   const ring = document.getElementById('ring-dev-1');
   const glow = document.getElementById('glow-dev-1');
@@ -261,40 +288,52 @@ function renderDevice1() {
     btn.style.borderColor = '#f59e0b';
     btn.style.borderWidth = '2px';
     btn.style.boxShadow = isDark ? '0 0 32px rgba(245, 158, 11, 0.55)' : '0 8px 24px rgba(245, 158, 11, 0.35)';
-    ring.classList.remove('hidden');
-    icon.className = 'material-symbols-outlined text-amber-500 text-[36px] transition-transform duration-200';
-    icon.style.fontVariationSettings = "'FILL' 1";
-    glow.classList.remove('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
-    text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
-    text.textContent = `ON (${d.powerWatts}W)`;
+    if (ring) ring.classList.remove('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined text-amber-500 text-[36px] transition-transform duration-200';
+      icon.style.fontVariationSettings = "'FILL' 1";
+    }
+    if (glow) glow.classList.remove('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+    if (text) {
+      text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
+      text.textContent = `ON (${d.powerWatts}W)`;
+    }
   } else {
     btn.style.backgroundColor = '';
     btn.style.borderColor = '';
     btn.style.borderWidth = '';
     btn.style.boxShadow = 'none';
-    ring.classList.add('hidden');
-    icon.className = 'material-symbols-outlined theme-text-muted text-[36px] transition-transform duration-200';
-    icon.style.fontVariationSettings = "'FILL' 0";
-    glow.classList.add('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
-    text.className = 'text-xs font-bold theme-text-muted';
-    text.textContent = 'OFF (0W)';
+    if (ring) ring.classList.add('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined theme-text-muted text-[36px] transition-transform duration-200';
+      icon.style.fontVariationSettings = "'FILL' 0";
+    }
+    if (glow) glow.classList.add('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
+    if (text) {
+      text.className = 'text-xs font-bold theme-text-muted';
+      text.textContent = 'OFF (0W)';
+    }
   }
 
-  if (d.wallState === 1) {
-    wallText.className = 'text-xs font-semibold theme-text-strong mt-0.5';
-    wallText.textContent = 'STATE 1 (Synced)';
-  } else {
-    wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
-    wallText.textContent = 'STATE 0 (Normal)';
+  if (wallText) {
+    if (d.wallState === 1) {
+      wallText.className = 'text-xs font-semibold theme-text-strong mt-0.5';
+      wallText.textContent = 'STATE 1 (Synced)';
+    } else {
+      wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
+      wallText.textContent = 'STATE 0 (Normal)';
+    }
   }
 }
 
-// Render Device 2: Bedroom Small Light
+// Render Device 2: Bedroom Small Light (Ambient Blue Accent)
 function renderDevice2() {
   const d = state.devices[1];
   const btn = document.getElementById('btn-toggle-2');
+  if (!btn) return;
+
   const icon = document.getElementById('icon-dev-2');
   const ring = document.getElementById('ring-dev-2');
   const glow = document.getElementById('glow-dev-2');
@@ -309,37 +348,47 @@ function renderDevice2() {
     btn.style.borderColor = '#3b82f6';
     btn.style.borderWidth = '2px';
     btn.style.boxShadow = isDark ? '0 0 32px rgba(59, 130, 246, 0.55)' : '0 8px 24px rgba(59, 130, 246, 0.35)';
-    ring.classList.remove('hidden');
-    icon.className = 'material-symbols-outlined text-blue-500 text-[36px] transition-transform duration-200';
-    icon.style.fontVariationSettings = "'FILL' 1";
-    icon.textContent = 'lightbulb';
-    glow.classList.remove('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
-    text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
-    text.textContent = `ON (${d.powerWatts}W)`;
-    badgeCh.className = 'px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/40 text-blue-500 dark:text-blue-400 font-bold text-[10px] tracking-wider uppercase';
+    if (ring) ring.classList.remove('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined text-blue-500 text-[36px] transition-transform duration-200';
+      icon.style.fontVariationSettings = "'FILL' 1";
+      icon.textContent = 'lightbulb';
+    }
+    if (glow) glow.classList.remove('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+    if (text) {
+      text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
+      text.textContent = `ON (${d.powerWatts}W)`;
+    }
+    if (badgeCh) badgeCh.className = 'px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/40 text-blue-500 dark:text-blue-400 font-bold text-[10px] tracking-wider uppercase';
   } else {
     btn.style.backgroundColor = '';
     btn.style.borderColor = '';
     btn.style.borderWidth = '';
     btn.style.boxShadow = 'none';
-    ring.classList.add('hidden');
-    icon.className = 'material-symbols-outlined theme-text-muted text-[36px] transition-transform duration-200';
-    icon.style.fontVariationSettings = "'FILL' 0";
-    icon.textContent = 'bedtime';
-    glow.classList.add('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
-    text.className = 'text-xs font-bold theme-text-muted';
-    text.textContent = 'OFF (0W)';
-    badgeCh.className = 'px-2.5 py-0.5 rounded-full theme-subcard border theme-text-muted font-bold text-[10px] tracking-wider uppercase';
+    if (ring) ring.classList.add('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined theme-text-muted text-[36px] transition-transform duration-200';
+      icon.style.fontVariationSettings = "'FILL' 0";
+      icon.textContent = 'bedtime';
+    }
+    if (glow) glow.classList.add('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
+    if (text) {
+      text.className = 'text-xs font-bold theme-text-muted';
+      text.textContent = 'OFF (0W)';
+    }
+    if (badgeCh) badgeCh.className = 'px-2.5 py-0.5 rounded-full theme-subcard border theme-text-muted font-bold text-[10px] tracking-wider uppercase';
   }
 
-  if (d.wallState === 1) {
-    wallText.className = 'text-xs font-semibold theme-text-strong mt-0.5';
-    wallText.textContent = 'STATE 1 (Synced)';
-  } else {
-    wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
-    wallText.textContent = 'STATE 0 (Normal)';
+  if (wallText) {
+    if (d.wallState === 1) {
+      wallText.className = 'text-xs font-semibold theme-text-strong mt-0.5';
+      wallText.textContent = 'STATE 1 (Synced)';
+    } else {
+      wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
+      wallText.textContent = 'STATE 0 (Normal)';
+    }
   }
 }
 
@@ -347,6 +396,8 @@ function renderDevice2() {
 function renderDevice3() {
   const d = state.devices[2];
   const btn = document.getElementById('fan-toggle-btn');
+  if (!btn) return;
+
   const icon = document.getElementById('fan-icon');
   const ring = document.getElementById('fan-pulse-ring');
   const glow = document.getElementById('glow-dev-3');
@@ -360,35 +411,46 @@ function renderDevice3() {
     btn.style.borderColor = '#10b981';
     btn.style.borderWidth = '2px';
     btn.style.boxShadow = isDark ? '0 0 32px rgba(16, 185, 129, 0.55)' : '0 8px 24px rgba(16, 185, 129, 0.35)';
-    ring.classList.remove('hidden');
-    icon.className = 'material-symbols-outlined text-emerald-500 dark:text-emerald-400 text-[38px] fan-spin';
-    icon.classList.remove('fan-stopped');
-    glow.classList.remove('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
-    text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
-    text.textContent = `ON (${d.powerWatts}W)`;
+    if (ring) ring.classList.remove('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined text-emerald-500 dark:text-emerald-400 text-[38px] fan-spin';
+      icon.classList.remove('fan-stopped');
+    }
+    if (glow) glow.classList.remove('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+    if (text) {
+      text.className = 'text-xs font-bold text-emerald-500 dark:text-emerald-400';
+      text.textContent = `ON (${d.powerWatts}W)`;
+    }
   } else {
     btn.style.backgroundColor = '';
     btn.style.borderColor = '';
     btn.style.borderWidth = '';
     btn.style.boxShadow = 'none';
-    ring.classList.add('hidden');
-    icon.className = 'material-symbols-outlined theme-text-muted text-[38px] fan-stopped';
-    glow.classList.add('opacity-0');
-    dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
-    text.className = 'text-xs font-bold theme-text-muted';
-    text.textContent = 'OFF (0W)';
+    if (ring) ring.classList.remove('hidden');
+    if (icon) {
+      icon.className = 'material-symbols-outlined theme-text-muted text-[38px] fan-stopped';
+    }
+    if (glow) glow.classList.add('opacity-0');
+    if (dot) dot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500';
+    if (text) {
+      text.className = 'text-xs font-bold theme-text-muted';
+      text.textContent = 'OFF (0W)';
+    }
   }
 
-  if (d.wallState === 1) {
-    wallText.className = 'text-xs font-semibold text-emerald-500 dark:text-emerald-400 mt-0.5';
-    wallText.textContent = 'STATE 1 (Synced)';
-  } else {
-    wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
-    wallText.textContent = 'STATE 0 (Normal)';
+  if (wallText) {
+    if (d.wallState === 1) {
+      wallText.className = 'text-xs font-semibold text-emerald-500 dark:text-emerald-400 mt-0.5';
+      wallText.textContent = 'STATE 1 (Synced)';
+    } else {
+      wallText.className = 'text-xs font-semibold theme-text-muted mt-0.5';
+      wallText.textContent = 'STATE 0 (Normal)';
+    }
   }
 }
 
+// Master device rendering
 function renderAllDevices() {
   renderDevice1();
   renderDevice2();
@@ -424,13 +486,29 @@ function setAllChannels(targetState) {
   showToast(targetState ? 'All Channels switched ON.' : 'All Channels switched OFF.');
 }
 
+// Expose globally
+window.updateCounters = updateCounters;
+window.renderDevice1 = renderDevice1;
+window.renderDevice2 = renderDevice2;
+window.renderDevice3 = renderDevice3;
+window.renderAllDevices = renderAllDevices;
+window.toggleDevice = toggleDevice;
+window.toggleWallState = toggleWallState;
+window.setAllChannels = setAllChannels;
+/**
+ * HOME 2.0 - TIMERS & SCHEDULING SYSTEM
+ * Manages in-card countdown micro-timers, recurring schedules, and automation callbacks.
+ */
+
 // Tab switcher between Quick Timer and Schedule inside each card
-window.switchCardTab = function(devIndex, targetTab) {
+function switchCardTab(devIndex, targetTab) {
   const cardNum = devIndex + 1;
   const timerBtn = document.getElementById(`tab-timer-btn-${cardNum}`);
   const schedBtn = document.getElementById(`tab-sched-btn-${cardNum}`);
   const timerView = document.getElementById(`card-timer-view-${cardNum}`);
   const schedView = document.getElementById(`card-sched-view-${cardNum}`);
+
+  if (!timerBtn || !schedBtn || !timerView || !schedView) return;
 
   if (targetTab === 'timer') {
     timerBtn.className = 'py-1.5 rounded-lg theme-tab-active font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer';
@@ -443,15 +521,19 @@ window.switchCardTab = function(devIndex, targetTab) {
     schedView.classList.remove('hidden');
     timerView.classList.add('hidden');
   }
-};
+}
 
 // Arm Device Timer
-window.armDeviceTimer = function(devIndex) {
+function armDeviceTimer(devIndex) {
   if (!checkMasterLock()) return;
 
   const cardNum = devIndex + 1;
-  const mins = parseInt(document.getElementById(`timer-duration-${cardNum}`).value) || 15;
-  const action = document.getElementById(`timer-action-${cardNum}`).value;
+  const durationEl = document.getElementById(`timer-duration-${cardNum}`);
+  const actionEl = document.getElementById(`timer-action-${cardNum}`);
+  if (!durationEl || !actionEl) return;
+
+  const mins = parseInt(durationEl.value, 10) || 15;
+  const action = actionEl.value;
   const dev = state.devices[devIndex];
 
   dev.timerSeconds = mins * 60;
@@ -465,7 +547,7 @@ window.armDeviceTimer = function(devIndex) {
     statusPill.className = 'flex flex-col gap-1 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400';
     title.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-pulse">hourglass_top</span> Micro-Timer Active';
     text.className = 'text-xs theme-text-strong font-mono font-bold';
-    text.textContent = `${action} in ${String(mins).padStart(2,'0')}:00 min`;
+    text.textContent = `${action} in ${String(mins).padStart(2, '0')}:00 min`;
   }
 
   dev.timerInterval = setInterval(() => {
@@ -482,14 +564,14 @@ window.armDeviceTimer = function(devIndex) {
     }
     const m = Math.floor(dev.timerSeconds / 60);
     const s = dev.timerSeconds % 60;
-    if (text) text.textContent = `${action} in ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} min`;
+    if (text) text.textContent = `${action} in ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} min`;
   }, 1000);
 
   showToast(`Timer Armed: ${dev.name} will ${action} in ${mins} min.`);
-};
+}
 
 // Cancel Device Timer
-window.cancelDeviceTimer = function(devIndex) {
+function cancelDeviceTimer(devIndex) {
   if (!checkMasterLock()) return;
   const dev = state.devices[devIndex];
   if (dev.timerInterval) {
@@ -509,15 +591,20 @@ window.cancelDeviceTimer = function(devIndex) {
     text.textContent = 'Standby • Ready for timer or recurring cron';
   }
   showToast(`Timer canceled for ${dev.name}.`);
-};
+}
 
 // In-Card Commit Schedule
-window.commitInCardSchedule = function(devIndex) {
+function commitInCardSchedule(devIndex) {
   if (!checkMasterLock()) return;
   const cardNum = devIndex + 1;
-  const action = document.getElementById(`csched-action-${cardNum}`).value;
-  const time = document.getElementById(`csched-time-${cardNum}`).value;
-  const cadence = document.getElementById(`csched-cadence-${cardNum}`).value;
+  const actionEl = document.getElementById(`csched-action-${cardNum}`);
+  const timeEl = document.getElementById(`csched-time-${cardNum}`);
+  const cadenceEl = document.getElementById(`csched-cadence-${cardNum}`);
+  if (!actionEl || !timeEl || !cadenceEl) return;
+
+  const action = actionEl.value;
+  const time = timeEl.value;
+  const cadence = cadenceEl.value;
   const dev = state.devices[devIndex];
 
   dev.schedule = { action, time, cadence, active: true };
@@ -542,9 +629,9 @@ window.commitInCardSchedule = function(devIndex) {
     `;
   }
   showToast(`✓ Schedule Saved: ${dev.name} will ${action} at ${time} (${cadence})!`);
-};
+}
 
-window.clearScheduleDirect = function(devIndex) {
+function clearScheduleDirect(devIndex) {
   if (!checkMasterLock()) return;
   const dev = state.devices[devIndex];
   dev.schedule = null;
@@ -563,12 +650,12 @@ window.clearScheduleDirect = function(devIndex) {
     `;
   }
   showToast(`Schedule cleared for ${dev.name}.`);
-};
+}
 
-window.editScheduleDirect = function(devIndex) {
+function editScheduleDirect(devIndex) {
   switchCardTab(devIndex, 'schedule');
   showToast(`Editing schedule for ${state.devices[devIndex].name}.`, 'info');
-};
+}
 
 // Fan initial countdown timer
 function initFanInitialTimer() {
@@ -588,11 +675,79 @@ function initFanInitialTimer() {
     dev.timerSeconds--;
     const m = Math.floor(dev.timerSeconds / 60);
     const s = dev.timerSeconds % 60;
-    if (text) text.textContent = `Turning OFF in ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} min`;
+    if (text) text.textContent = `Turning OFF in ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} min`;
   }, 1000);
 }
 
-// ROBUST THEME TOGGLE: Seamless Switch Between Dark & Warm Light
+// Expose globally for inline onclick handlers and orchestrators
+window.switchCardTab = switchCardTab;
+window.armDeviceTimer = armDeviceTimer;
+window.cancelDeviceTimer = cancelDeviceTimer;
+window.commitInCardSchedule = commitInCardSchedule;
+window.clearScheduleDirect = clearScheduleDirect;
+window.editScheduleDirect = editScheduleDirect;
+window.initFanInitialTimer = initFanInitialTimer;
+/**
+ * HOME 2.0 - HARDWARE & EEPROM / NVRAM SETTINGS CONTROLLER
+ * Manages modal interactions for renaming channels and customizing subtext designations.
+ */
+
+// Open Settings Modal
+function openSettingsModal() {
+  if (!checkMasterLock()) return;
+  const modal = document.getElementById('settings-modal');
+  const panel = document.getElementById('settings-modal-panel');
+  if (!modal || !panel) return;
+
+  state.devices.forEach((d, i) => {
+    const n = document.getElementById(`input-name-${i}`);
+    const s = document.getElementById(`input-sub-${i}`);
+    if (n) n.value = d.name;
+    if (s) s.value = d.subtext;
+  });
+
+  modal.classList.remove('opacity-0', 'pointer-events-none');
+  panel.classList.remove('scale-95');
+  panel.classList.add('scale-100');
+}
+
+// Close Settings Modal
+function closeSettingsModal() {
+  const modal = document.getElementById('settings-modal');
+  const panel = document.getElementById('settings-modal-panel');
+  if (!modal || !panel) return;
+
+  panel.classList.remove('scale-100');
+  panel.classList.add('scale-95');
+  modal.classList.add('opacity-0', 'pointer-events-none');
+}
+
+// Save Device Settings to NVRAM simulation
+function saveDeviceSettings() {
+  state.devices.forEach((d, i) => {
+    const n = document.getElementById(`input-name-${i}`);
+    const s = document.getElementById(`input-sub-${i}`);
+    if (n && n.value.trim()) d.name = n.value.trim();
+    if (s && s.value.trim()) d.subtext = s.value.trim();
+
+    const titleEl = document.getElementById(`title-dev-${i + 1}`);
+    const subEl = document.getElementById(`sub-dev-${i + 1}`);
+    if (titleEl) titleEl.textContent = d.name;
+    if (subEl) subEl.textContent = d.subtext;
+  });
+  closeSettingsModal();
+  showToast('✓ Hardware NVRAM updated with appliance names!');
+}
+
+// Expose globally
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.saveDeviceSettings = saveDeviceSettings;
+/**
+ * HOME 2.0 - THEME SWITCHER
+ * Seamless toggling between Precision Dark and Warm Sand Light interfaces.
+ */
+
 function toggleTheme() {
   const html = document.documentElement;
   const themeIcon = document.getElementById('theme-icon');
@@ -617,7 +772,14 @@ function toggleTheme() {
   renderAllDevices();
 }
 
-// Quick Hardware Sync
+// Expose globally
+window.toggleTheme = toggleTheme;
+/**
+ * HOME 2.0 - MAIN APPLICATION ENTRY POINT & EVENT BINDINGS
+ * Bootstraps the application, hooks event listeners to UI components, and triggers real-time updates.
+ */
+
+// Quick Hardware Sync telemetry probe
 function quickSyncController() {
   const syncIcon = document.getElementById('sync-icon');
   if (syncIcon) {
@@ -625,57 +787,16 @@ function quickSyncController() {
     setTimeout(() => syncIcon.classList.remove('rotate-[360deg]'), 500);
   }
   const jitter = Math.floor(13 + Math.random() * 6);
-  document.getElementById('telemetry-rtt').textContent = `${jitter}ms`;
-  document.getElementById('telemetry-ping').textContent = `${jitter}ms`;
+  const rttEl = document.getElementById('telemetry-rtt');
+  const pingEl = document.getElementById('telemetry-ping');
+  if (rttEl) rttEl.textContent = `${jitter}ms`;
+  if (pingEl) pingEl.textContent = `${jitter}ms`;
   showToast(`Controller bus synchronized. Round trip latency: ${jitter}ms.`);
 }
 
-// Settings Modal Management
-function openSettingsModal() {
-  if (!checkMasterLock()) return;
-  const modal = document.getElementById('settings-modal');
-  const panel = document.getElementById('settings-modal-panel');
-  if (!modal || !panel) return;
+window.quickSyncController = quickSyncController;
 
-  state.devices.forEach((d, i) => {
-    const n = document.getElementById(`input-name-${i}`);
-    const s = document.getElementById(`input-sub-${i}`);
-    if (n) n.value = d.name;
-    if (s) s.value = d.subtext;
-  });
-
-  modal.classList.remove('opacity-0', 'pointer-events-none');
-  panel.classList.remove('scale-95');
-  panel.classList.add('scale-100');
-}
-
-function closeSettingsModal() {
-  const modal = document.getElementById('settings-modal');
-  const panel = document.getElementById('settings-modal-panel');
-  if (!modal || !panel) return;
-
-  panel.classList.remove('scale-100');
-  panel.classList.add('scale-95');
-  modal.classList.add('opacity-0', 'pointer-events-none');
-}
-
-function saveDeviceSettings() {
-  state.devices.forEach((d, i) => {
-    const n = document.getElementById(`input-name-${i}`);
-    const s = document.getElementById(`input-sub-${i}`);
-    if (n && n.value.trim()) d.name = n.value.trim();
-    if (s && s.value.trim()) d.subtext = s.value.trim();
-
-    const titleEl = document.getElementById(`title-dev-${i + 1}`);
-    const subEl = document.getElementById(`sub-dev-${i + 1}`);
-    if (titleEl) titleEl.textContent = d.name;
-    if (subEl) subEl.textContent = d.subtext;
-  });
-  closeSettingsModal();
-  showToast('✓ Hardware NVRAM updated with appliance names!');
-}
-
-// Initialize on Load
+// Initialize on DOM Ready
 document.addEventListener('DOMContentLoaded', () => {
   // Master Lock Buttons
   document.getElementById('master-lock-trigger')?.addEventListener('click', toggleMasterLock);
@@ -704,15 +825,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-cancel-settings')?.addEventListener('click', closeSettingsModal);
   document.getElementById('btn-save-settings')?.addEventListener('click', saveDeviceSettings);
 
+  // Close modal when clicking backdrop
   document.getElementById('settings-modal')?.addEventListener('click', (e) => {
     if (e.target === document.getElementById('settings-modal')) closeSettingsModal();
   });
 
-  // Dynamic Greeting init & continuous tick
+  // Dynamic Greeting init & continuous tick every 10 seconds
   updateRealtimeGreeting();
   setInterval(updateRealtimeGreeting, 10000);
 
-  // Start background timers & render initial states
+  // Render initial states & initialize background timers
   renderMasterLockState();
   renderAllDevices();
   initFanInitialTimer();
